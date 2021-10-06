@@ -1,0 +1,29 @@
+# Created by .ignore support plugin (hsz.mobi)
+.idea
+*.iml
+
+.DS_Store
+.AppleDouble
+.LSOverride
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+out
+gen
+.env
+!/.env
+
+_OUTTAKES
+tmp
+*.sav
+node_modules
+/testThis
+/data
+/_OLD
