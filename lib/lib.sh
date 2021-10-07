@@ -1054,7 +1054,12 @@ _runJob() {
         else
             mailLogLn "${tarParams[$((l + 1))]}"
         fi
-        rc=0
+        if [ ! -r "${path}" ]; then
+            mailLogLn "DRY RUN: WARNING - Path to save '$path' is not readable"
+            rc=2
+        else
+            rc=0
+        fi
         popIndents
         popIndents
         mailLogLn "DRY RUN: Would remove wait file '${waitFileName}'"
@@ -1071,8 +1076,12 @@ _runJob() {
 
         mailLogStart "Backing up"
 
-        set -o pipefail
-        if [ "${SPLIT}" -eq 1 ]; then
+        if [ ! -r "${path}" ]; then
+            mailLogEnd "ERROR: Path to save '$path' is not readable"
+            echo "ERROR: Path to save '$path' is not readable" > "${tarLog}"
+            rc=2
+        elif [ "${SPLIT}" -eq 1 ]; then
+            set -o pipefail
             ( tar "${tarParams[@]}" | split -b "${SPLITSIZE}" - "${fullSaveName}." ) > "${tarLog}" 2>&1
         else
 #            echo tar "${tarParams[@]}" > "${tarLog}" 2>&1
