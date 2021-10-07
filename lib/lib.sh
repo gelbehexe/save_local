@@ -4,13 +4,14 @@ _DISABLE_INDENT=0
 
 usage() {
     cat >&2 <<HEREDOC
-  Usage: ${THIS_NAME} [[-v..|-q] [-n] [-b] [-f] [-x] [-y <0|1>] [-c <config file/path>] [-s <path-to-sets>] [-d <datetime(YYYY-MM-DD HH:MM:SS)>] [-l <datetime(YYYY-MM-DD HH:MM:SS)>] [-t <backup path>] [-j <jobs>] [set1..n] | -h ]
+  Usage: ${THIS_NAME} [[-v..|-q] [-n] [-b] [-f] [-o] [-x] [-y <0|1>] [-c <config file/path>] [-s <path-to-sets>] [-d <datetime(YYYY-MM-DD HH:MM:SS)>] [-l <datetime(YYYY-MM-DD HH:MM:SS)>] [-t <backup path>] [-j <jobs>] [set1..n] | -h ]
     -v: Increase verbosity
     -q: Quiet - overrides verbosity (no output except in case of error)
     -n: Dry run
     -t: Path to store backups
     -b: Force timestamp even if '-d' / '-f' or '-l' is set (normally automatically on every global full backup)
     -f: Force full save
+    -o: Override existing backup directory
     -x: Dont use default config
     -y: Split 0 or 1
     -c: Use config file <file|path>
@@ -341,7 +342,7 @@ _isNumber() {
 
 readOpt() {
     local tmpVal
-    while getopts "hxvqnfbc:d:l:s:y:t:j:" o; do
+    while getopts "hxvqnfboc:d:l:s:y:t:j:" o; do
         case "${o}" in
         x)
             _CMD_NO_DEFAULT_CONFIG=1
@@ -353,6 +354,9 @@ readOpt() {
             ;;
         b)
             _CMD_FORCE_FULL_TIMESTAMP=1
+            ;;
+        o)
+            _CMD_OVERRIDE_EXISTING_BACKUPS=1
             ;;
         y)
             _checkRequiredOption "-y" "${OPTARG}"
@@ -915,6 +919,7 @@ _applyGlobalOptions() {
     _applyGlobalOption "FORCE_FULL" "${FORCE_FULL}" "${_CMD_FORCE_FULL}"
     _applyGlobalOption "SPLIT" "${SPLIT}" "${_CMD_SPLIT}"
     _applyGlobalOption "MAX_JOBS" "${MAX_JOBS}" "${_CMD_MAX_JOBS}"
+    _applyGlobalOption "OVERRIDE_EXISTING_BACKUPS" "${OVERRIDE_EXISTING_BACKUPS}" "${_CMD_OVERRIDE_EXISTING_BACKUPS}"
     pushIndents
     _checkLockFile
     _applySaveDir
@@ -1039,35 +1044,59 @@ _runJob() {
     fi
     test "${_DRY_RUN}" -eq 1 && mailLogLn "Dry Run: YES"
     mailLogLine "-"
+
+    mailLogStart "Create target dir '$(_getTargetBase "$full" "$name")'"
     if [ "${_DRY_RUN}" -eq 1 ]; then
-        mailLogLn "DRY RUN: Would create target dir '${targetPath}'"
-        mailLogLn "DRY RUN: Would create wait file '${waitFileName}'"
-        mailLogLn "DRY RUN: Would create '${tarLog}'"
-        mailLogLn "DRY RUN: Would execute 'tar ${tarParams[0]}"
-        pushIndents
-        pushIndents
-        l=$((${#tarParams[@]} - 2))
-        for p in "${tarParams[@]:1:${l}}"; do
-            mailLogLn "${p} \\"
-        done
-        if [ "${SPLIT}" -eq 1 ]; then
-            mailLogLn "${tarParams[$((l + 1))]} | split -b ${SPLITSIZE} - \"${fullSaveName}.\""
+        rc=0
+        if [ -d "${targetPath}" ]; then
+            if testBool "$OVERRIDE_EXISTING_BACKUPS"; then
+                mailLogEnd "DRY RUN: would recreate it"
+            else
+                mailLogEnd "DRY RUN: ERROR - target dir exists - aborting"
+                rc=2
+            fi
         else
-            mailLogLn "${tarParams[$((l + 1))]}"
+            mailLogEnd "DRY RUN: Would create it"
         fi
-        if [ ! -r "${path}" ]; then
-            mailLogLn "DRY RUN: WARNING - Path to save '$path' is not readable"
-            rc=2
-        else
-            rc=0
+
+        if [ "$rc" -eq 0 ]; then
+            mailLogLn "DRY RUN: Would create wait file '${waitFileName}'"
+            mailLogLn "DRY RUN: Would create '${tarLog}'"
+            mailLogLn "DRY RUN: Would execute 'tar ${tarParams[0]}"
+            pushIndents
+            pushIndents
+            l=$((${#tarParams[@]} - 2))
+            for p in "${tarParams[@]:1:${l}}"; do
+                mailLogLn "${p} \\"
+            done
+            if [ "${SPLIT}" -eq 1 ]; then
+                mailLogLn "${tarParams[$((l + 1))]} | split -b ${SPLITSIZE} - \"${fullSaveName}.\""
+            else
+                mailLogLn "${tarParams[$((l + 1))]}"
+            fi
+            if [ ! -r "${path}" ]; then
+                mailLogLn "DRY RUN: ERROR - Path to save '$path' is not readable"
+                rc=2
+            else
+                rc=0
+            fi
+            popIndents
+            popIndents
+            test "$rc" -eq 0 && mailLogLn "DRY RUN: Would remove wait file '${waitFileName}'"
         fi
-        popIndents
-        popIndents
-        mailLogLn "DRY RUN: Would remove wait file '${waitFileName}'"
     else
-        mailLogStart "Creating target dir"
-        mkdir -p "${targetPath}" || exitWithError "Could not create '${targetPath}'"
-        mailLogEndOk
+        if [ -d "${targetPath}" ]; then
+            if testBool "$OVERRIDE_EXISTING_BACKUPS"; then
+                mailLogAppend "recreating ... "
+                test -n "${targetPath}" || exitWithError "targetPath is empty - this should never happen"
+                rm -rf "${targetPath}" || exitWithError "Error removing targetPath '${targetPath}'"
+            else
+                exitWithError "Target dir exists - aborting"
+            fi
+        fi
+            mkdir -p "${targetPath}" || exitWithError "Could not create '${targetPath}'"
+            mailLogEndOk
+
         mailLogStart "Creating wait file"
         echo "$$" >"${waitFileName}" || exitWithError "Could not create '${waitFileName}'"
         mailLogEndOk
