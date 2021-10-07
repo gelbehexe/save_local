@@ -6,7 +6,7 @@ usage() {
     cat >&2 <<HEREDOC
   Usage: ${THIS_NAME} [[-v..|-q] [-n] [-b] [-f] [-x] [-y <0|1>] [-c <config file/path>] [-s <path-to-sets>] [-d <datetime(YYYY-MM-DD HH:MM:SS)>] [-l <datetime(YYYY-MM-DD HH:MM:SS)>] [-t <backup path>] [-j <jobs>] [set1..n] | -h ]
     -v: Increase verbosity
-    -q: Quiet - overrides verbosity
+    -q: Quiet - overrides verbosity (no output except in case of error)
     -n: Dry run
     -t: Path to store backups
     -b: Force timestamp even if '-d' / '-f' or '-l' is set (normally automatically on every global full backup)
@@ -1159,9 +1159,9 @@ runBgJob() {
     info "Removing pidFile '$pidFile'"
     rm -f "$pidFile"
     _appendLogFile "$job"
-    while read -r l; do
-        info "$l"
-    done < <(cat "$logFile")
+#    while read -r l; do
+#        info "$l"
+#    done < <(cat "$logFile")
     #    debug "Appending '$logFile' to '${_LOG_FILE}' ..."
     #    cat "$logFile" >>"${_LOG_FILE}"
     _unlock
@@ -1360,7 +1360,7 @@ startJobs() {
         mailLogLn "$(printf 'Starting at: %s' "$_START_TIME")"
     ) | while read -r l; do
         echo "$l" >>"${_LOG_FILE}"
-        notice "$l"
+#        notice "$l"
     done
 
     maxJobs=${MAX_JOBS}
@@ -1408,7 +1408,7 @@ startJobs() {
         mailLogLine
     ) | while read -r l; do
         echo "$l" >>"${_LOG_FILE}"
-        notice "$l"
+#        notice "$l"
     done
 
     _removeLockFile
