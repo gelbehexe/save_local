@@ -115,7 +115,7 @@ _log() {
 
 _doLog() {
     local prefix
-    prefix="$(printf '%-7s' "[$1]")"
+    prefix="$(printf '%-8s' "[$1]")"
     shift
 
     args=("$prefix" "$@")
