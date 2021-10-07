@@ -974,6 +974,7 @@ _runJob() {
     local name def tarParams full startTime endTime targetPath excludedPaths t logLen
     local fullSaveName waitFileName p len fullReason tarLog rc
     local path exclude enabled force_full
+    local PSA
     name="$1"
     def="$2"
     force_full=0
@@ -1081,23 +1082,33 @@ _runJob() {
             echo "ERROR: Path to save '$path' is not readable" > "${tarLog}"
             rc=2
         elif [ "${SPLIT}" -eq 1 ]; then
-            set -o pipefail
-            ( tar "${tarParams[@]}" | split -b "${SPLITSIZE}" - "${fullSaveName}." ) > "${tarLog}" 2>&1
+            (
+                tar "${tarParams[@]}" | split -b "${SPLITSIZE}" - "${fullSaveName}.";
+                PSA=( "${PIPESTATUS[@]}" )
+
+                # rc of split command
+                test "${PSA[1]}" -gt 0 && exit 2
+                # exit with tar rc
+                exit "${PSA[0]}"
+
+            ) > "${tarLog}" 2>&1
+
+            rc=$?
         else
 #            echo tar "${tarParams[@]}" > "${tarLog}" 2>&1
 #            tar -f "${fullSaveName}" "${tarParams[@]}" > "${tarLog}" 2>&1
             tar "${tarParams[@]}" > "${tarLog}" 2>&1
+            rc=$?
         fi
-        rc=$?
+
         if [ "$rc" -eq 0 ]; then
             mailLogEndOk
         elif [ "$rc" -eq 1 ] && [ "$(uname -s)" = "Linux" ]; then
             # linux tar returns 1 if some files differs, only > 1 means an error
-            debug "tar returns 1 on linux - handle as OK"
             rc=0
             mailLogEndOk
         else
-            mailLogEnd "Error"
+            mailLogEnd "Error (Code: $rc)"
             logLen="$(wc -l "$tarLog" | $SED_BIN -r 's/^\s*([0-9]+).*$/\1/g')"
             pushIndents
             mailLog "Logfile:"
@@ -1423,10 +1434,11 @@ startJobs() {
 #        notice "$l"
     done
 
-    _removeLockFile
-    _setLastFullDate
-
     RC=0
     _getRC || RC=1
     _clearRC
+
+    _removeLockFile
+    _setLastFullDate
+
 }
