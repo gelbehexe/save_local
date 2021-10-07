@@ -90,7 +90,7 @@ _DEFAULT_TAR_PARAMS=("-cvjpm")
 #exclude trash and backups
 _DEFAULT_TAR_PARAMS+=( "--exclude=lost+found" "--exclude=.AppleDouble" )
 _DEFAULT_TAR_PARAMS+=( "--exclude=.AppleDesktop" "--exclude=.AppleDB" "--exclude=Temporary Items" )
-_DEFAULT_TAR_PARAMS+=( "--exclude=Network Trash Folder"  "--exclude=.recycle --exclude=*~" )
+_DEFAULT_TAR_PARAMS+=( "--exclude=Network Trash Folder"  "--exclude=.recycle" "--exclude=*~" )
 _DEFAULT_TAR_PARAMS+=( "--exclude=.Trash-*" "--exclude=.cache" "--exclude={*.pid,*.sock,*.socket}")
 _DEFAULT_TAR_PARAMS+=( "--exclude=dontsave")
 
