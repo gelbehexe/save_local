@@ -4,10 +4,12 @@ _DISABLE_INDENT=0
 
 usage() {
     cat >&2 <<HEREDOC
-  Usage: ${THIS_NAME} [[-v..|-q] [-n] [-f] [-x] [-y <0|1>] [-c <config file/path>] [-s <path-to-sets>] [-d <datetime(YYYY-MM-DD HH:MM:SS)>] [-l <datetime(YYYY-MM-DD HH:MM:SS)>] [-t <backup path>] [-j <jobs>] [set1..n] | -h ]
+  Usage: ${THIS_NAME} [[-v..|-q] [-n] [-b] [-f] [-x] [-y <0|1>] [-c <config file/path>] [-s <path-to-sets>] [-d <datetime(YYYY-MM-DD HH:MM:SS)>] [-l <datetime(YYYY-MM-DD HH:MM:SS)>] [-t <backup path>] [-j <jobs>] [set1..n] | -h ]
     -v: Increase verbosity
     -q: Quiet - overrides verbosity
     -n: Dry run
+    -t: Path to store backups
+    -b: Force timestamp even if '-d' / '-f' or '-l' is set (normally automatically on every global full backup)
     -f: Force full save
     -x: Dont use default config
     -y: Split 0 or 1
@@ -339,13 +341,18 @@ _isNumber() {
 
 readOpt() {
     local tmpVal
-    while getopts "hxvqnfc:d:l:s:y:t:j:" o; do
+    while getopts "hxvqnfbc:d:l:s:y:t:j:" o; do
         case "${o}" in
         x)
             _CMD_NO_DEFAULT_CONFIG=1
             ;;
         f)
             _CMD_FORCE_FULL=1
+            _NO_FULL_TIMESTAMP=1
+            _NO_FULL_TIMESTAMP_REASONS+=( "Full save is forced" )
+            ;;
+        b)
+            _CMD_FORCE_FULL_TIMESTAMP=1
             ;;
         y)
             _checkRequiredOption "-y" "${OPTARG}"
@@ -359,11 +366,15 @@ readOpt() {
             _checkRequiredOption "-d" "${OPTARG}"
             tmpVal=${OPTARG}
             _CMD_DATETIME="$(parseDate "${tmpVal}")" || exitWithError "Wrong date format for '-d'"
+            _NO_FULL_TIMESTAMP=1
+            _NO_FULL_TIMESTAMP_REASONS+=( "Option '-d' set" )
             ;;
         l)
             _checkRequiredOption "-l" "${OPTARG}"
             tmpVal=${OPTARG}
             _CMD_LASTFULLDATE="$(parseDate "${tmpVal}")" || exitWithError "Wrong date format for '-l'"
+            _NO_FULL_TIMESTAMP=1
+            _NO_FULL_TIMESTAMP_REASONS+=( "Option '-l' set" )
             ;;
         t)
             _checkRequiredOption "-t" "${OPTARG}"
@@ -762,8 +773,36 @@ _getLastFullDate() {
     fi
     popIndents
 }
+
+_isFullSaveTimestampRequired() {
+    local reasons rc
+    notice "Checking if full save time stamp has to be set ..."
+    pushIndents
+    if ! testBool "${_FULL}"; then
+        notice "NO: This is not a full backup"
+        rc=1
+    elif testBool "${_NO_FULL_TIMESTAMP}"; then
+        reasons="$(printf '%s, ' "${_NO_FULL_TIMESTAMP_REASONS[@]}" | $SED_BIN -r 's/\, $//g')"
+        if testBool "${_CMD_FORCE_FULL_TIMESTAMP}"; then
+            notice "YES: Forced by '-b' (overrides: ${reasons})"
+            rc=0
+        else
+            notice "NO: ${reasons}"
+            rc=1
+        fi
+    else
+        rc=0
+        notice "YES: full backup"
+    fi
+    popIndents
+    return $rc
+}
+
 _setLastFullDate() {
     local tsFile
+
+    _isFullSaveTimestampRequired || return
+
     tsFile="${SAVE_DIR}/.lastBackup"
     debug "Creating last backup file '$tsFile'"
 
@@ -1330,14 +1369,7 @@ startJobs() {
     if [ "${maxJobs}" -lt 2 ]; then
         debug "Run synchronously"
         _JOB_FOLDER="$(_prepareJobFolder)"
-        #        echo "XXXXXXXXX"
-        #        echo "$_JOB_FOLDER"
-        #        echo "${_TMP_FILES[@]}"
-        #        echo "XXXXXXXXX"
-
-        #        _JOB_FOLDER="$(_createTmp "save_local.jobs" 1)"
-        #        _TMP_FILES+=("$_JOB_FOLDER")
-        test -z "${_JOB_FOLDER}" && exitWithError "Could not create job folder"
+         test -z "${_JOB_FOLDER}" && exitWithError "Could not create job folder"
         while [ "${#_OPEN_JOBS[@]}" -gt 0 ]; do
             job="${_OPEN_JOBS[0]}"
             def="${_OPEN_DEFS[0]}"
@@ -1370,9 +1402,6 @@ startJobs() {
         startNextBgJob
     fi
 
-    _removeLockFile
-    _setLastFullDate
-
     endTime="$(date "+%Y-%m-%d %H:%M:%S")"
     (
         mailLogLn "$(printf 'Completing backup at: %s' "'$endTime'")"
@@ -1381,6 +1410,9 @@ startJobs() {
         echo "$l" >>"${_LOG_FILE}"
         notice "$l"
     done
+
+    _removeLockFile
+    _setLastFullDate
 
     RC=0
     _getRC || RC=1
