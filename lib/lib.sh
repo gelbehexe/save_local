@@ -1040,6 +1040,11 @@ _runJob() {
         rc=$?
         if [ "$rc" -eq 0 ]; then
             mailLogEndOk
+        elif [ "$rc" -eq 1 ] && [ "$(uname -s)" = "Linux" ]; then
+            # linux tar returns 1 if some files differs, only > 1 means an error
+            debug "tar returns 1 on linux - handle as OK"
+            rc=0
+            mailLogEndOk
         else
             mailLogEnd "Error"
             logLen="$(wc -l "$tarLog" | $SED_BIN -r 's/^\s*([0-9]+).*$/\1/g')"
