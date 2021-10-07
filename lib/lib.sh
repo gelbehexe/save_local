@@ -978,7 +978,7 @@ _waitForUnlock() {
 _runJob() {
     local name def tarParams full startTime endTime targetPath excludedPaths t logLen
     local fullSaveName waitFileName p len fullReason tarLog rc
-    local path exclude enabled force_full
+    local path exclude enabled force_full size
     local PSA
     name="$1"
     def="$2"
@@ -1120,11 +1120,13 @@ _runJob() {
             ) > "${tarLog}" 2>&1
 
             rc=$?
+            size="$(du -shc "${fullSaveName}.*" | tail -n 1 | cut -f1)"
         else
 #            echo tar "${tarParams[@]}" > "${tarLog}" 2>&1
 #            tar -f "${fullSaveName}" "${tarParams[@]}" > "${tarLog}" 2>&1
             tar "${tarParams[@]}" > "${tarLog}" 2>&1
             rc=$?
+            size="$(du -shc "${fullSaveName}" | tail -n 1 | cut -f1)"
         fi
 
         if [ "$rc" -eq 0 ]; then
@@ -1154,6 +1156,8 @@ _runJob() {
 
         mailLogStart "Removing wait file"
         rm "${waitFileName}" && mailLogEndOk
+
+        mailLogLn "Backup Size: ${size}"
 
     fi
 
