@@ -765,7 +765,7 @@ _getLastFullDate() {
 _setLastFullDate() {
     local tsFile
     tsFile="${SAVE_DIR}/.lastBackup"
-    debug "Creating last backup file 'tsFile'"
+    debug "Creating last backup file '$tsFile'"
 
     if [ "${_DRY_RUN}" -eq 1 ]; then
         msg "DRY RUN: Would create '$tsFile' ..."
