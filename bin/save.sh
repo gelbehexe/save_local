@@ -84,8 +84,11 @@ RC=0
 SED_BIN="$(which gsed || which sed)"
 
 # Standardparameter fuer Tar
-#_DEFAULT_TAR_PARAMS=("-cvjpm" "--ignore-failed-read")
 _DEFAULT_TAR_PARAMS=("-cvjpm")
+
+if [ "$(uname -s)" != "Darwin" ]; then
+    _DEFAULT_TAR_PARAMS+=("--ignore-failed-read")
+fi
 
 #exclude trash and backups
 _DEFAULT_TAR_PARAMS+=( "--exclude=lost+found" "--exclude=.AppleDouble" )

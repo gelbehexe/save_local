@@ -1004,9 +1004,6 @@ _runJob() {
     tarLog="${targetPath}/save.log"
     fullSaveName="${targetPath}/save.tar.bz2"
     tarParams=("${_DEFAULT_TAR_PARAMS[@]}")
-    if [ "$(uname -s)" != "Darwin" ]; then
-        tarParams+=("--ignore-failed-read")
-    fi
     test "$full" -eq 0 && tarParams+=("--newer-mtime=${BACKUP_DATETIME}")
     tarParams+=("--exclude=${SAVE_DIR}")
     waitFileName="${targetPath}/wait"
@@ -1396,7 +1393,7 @@ _getTargetBase() {
 }
 
 startJobs() {
-    local job def len jobConfigFolder idx endTime maxJobs
+    local job def len jobConfigFolder idx endTime maxJobs p
     _OPEN_JOBS=("${_BACKUP_NAMES[@]}")
     _OPEN_DEFS=("${_BACKUP_DEFS[@]}")
     cat /dev/null >"${_LOG_FILE}"
@@ -1410,6 +1407,15 @@ startJobs() {
         mailLogLn "$(printf 'Backup date: %s' "$BACKUP_DATETIME")"
         mailLogLn "$(printf 'Split: %s' "$(_getPrintableBool "$SPLIT")")"
         mailLogLn "$(printf 'Starting at: %s' "$_START_TIME")"
+        mailLogLine
+        mailLogLn "Default tar parameters:"
+        pushIndents
+        pushIndents
+        for p in "${_DEFAULT_TAR_PARAMS[@]}"; do
+            mailLogLn "'$p'"
+        done
+        popIndents
+        popIndents
     ) | while read -r l; do
         echo "$l" >>"${_LOG_FILE}"
 #        notice "$l"
