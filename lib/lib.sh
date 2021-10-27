@@ -794,7 +794,7 @@ _isFullSaveTimestampRequired() {
             notice "NO: ${reasons}"
             rc=1
         fi
-    elif "$RC" -gt 0; then
+    elif [ "$RC" -gt 0 ]; then
         rc=1
         notice "NO: An error occurred"
     else
