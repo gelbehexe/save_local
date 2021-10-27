@@ -1120,7 +1120,7 @@ _runJob() {
             ) > "${tarLog}" 2>&1
 
             rc=$?
-            size="$(du -shc "${fullSaveName}.*" | tail -n 1 | cut -f1)"
+            size="$(du -shc "${fullSaveName}".* | tail -n 1 | cut -f1)"
         else
 #            echo tar "${tarParams[@]}" > "${tarLog}" 2>&1
 #            tar -f "${fullSaveName}" "${tarParams[@]}" > "${tarLog}" 2>&1
