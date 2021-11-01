@@ -1160,7 +1160,7 @@ _runJob() {
             errorInfo="ERROR CODE ($rc) for '${name}' at $(date "+%Y-%m-%d %H:%M:%S")"
             mailLog "${errorInfo}"
             mailLogStart "Writing information to error file"
-            echo "${errorInfo}" >>"${errorInfo}"
+            echo "${errorInfo}" >>"${errorFile}"
             mailLogEnd "DONE"
         fi
 
