@@ -977,7 +977,7 @@ _waitForUnlock() {
 
 _runJob() {
     local name def tarParams full startTime endTime targetPath excludedPaths t logLen
-    local fullSaveName waitFileName p len fullReason tarLog rc
+    local fullSaveName waitFileName errorInfo errorFile p len fullReason tarLog rc
     local path exclude enabled force_full size
     local PSA
     name="$1"
@@ -1007,6 +1007,7 @@ _runJob() {
     test "$full" -eq 0 && tarParams+=("--newer-mtime=${BACKUP_DATETIME}")
     tarParams+=("--exclude=${SAVE_DIR}")
     waitFileName="${targetPath}/wait"
+    errorFile="${targetPath}/error"
     startTime="$(date "+%Y-%m-%d %H:%M:%S")"
     excludedPaths=()
     if [ -n "$exclude" ]; then
@@ -1154,6 +1155,16 @@ _runJob() {
             mailLogLn "---"
         fi
 
+        # keep wait file in case of error as indicator
+        if [ "$rc" -ne 0 ]; then
+            errorInfo="ERROR CODE ($rc) for '${name}' at $(date "+%Y-%m-%d %H:%M:%S")"
+            mailLog "${errorInfo}"
+            mailLogStart "Writing information to error file"
+            echo "${errorInfo}" >>"${errorInfo}"
+            mailLogEnd "DONE"
+        fi
+
+        # always remove mail file
         mailLogStart "Removing wait file"
         rm "${waitFileName}" && mailLogEndOk
 
