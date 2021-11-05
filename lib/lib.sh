@@ -4,7 +4,7 @@ _DISABLE_INDENT=0
 
 usage() {
     cat >&2 <<HEREDOC
-  Usage: ${THIS_NAME} [[-v..|-q] [-n] [-b] [-f] [-o] [-x] [-y <0|1>] [-c <config file/path>] [-s <path-to-sets>] [-d <datetime(YYYY-MM-DD HH:MM:SS)>] [-l <datetime(YYYY-MM-DD HH:MM:SS)>] [-t <backup path>] [-j <jobs>] [set1..n] | -h ]
+  Usage: ${THIS_NAME} [[-v..|-q] [-n] [-b] [-f] [-o] [-x] [-y <0|1>] [-c <config file/path>] [-s <path-to-sets>] [-d <datetime(YYYY-MM-DD HH:MM:SS)>] [-l <datetime(YYYY-MM-DD HH:MM:SS)>] [-t <backup path>] [-j <jobs>] [-k <days>] [-i <0|1>] [-m <0|1>] [set1..n] | -h ]
     -v: Increase verbosity
     -q: Quiet - overrides verbosity (no output except in case of error)
     -n: Dry run
@@ -19,6 +19,9 @@ usage() {
     -d: Override datetime of backup
     -l: Override last full date of backup
     -j: Max parallel jobs
+    -k: Remove old backups after x days (0 = do not remove)
+    -i: Dont remove old backups with errors (bool)
+    -m: Dont remove full backups (bool)
     -h: Show Usage
     set1..n: Sets to save
 HEREDOC
@@ -342,7 +345,7 @@ _isNumber() {
 
 readOpt() {
     local tmpVal
-    while getopts "hxvqnfboc:d:l:s:y:t:j:" o; do
+    while getopts "hxvqnfboc:d:l:s:y:t:j:k:i:m:" o; do
         case "${o}" in
         x)
             _CMD_NO_DEFAULT_CONFIG=1
@@ -387,6 +390,19 @@ readOpt() {
         s)
             _checkRequiredOption "-s" "${OPTARG}"
             _CMD_SETS_PATH=${OPTARG}
+            ;;
+        k)
+            _checkRequiredOption '-k' "${OPTARG}"
+            _isNumber "${OPTARG}" || exitWithError "Max age in days (-k) must be an integer >= 0"
+            _CMD_REMOVE_OLD_AFTER_DAYS="$OPTARG"
+            ;;
+        i)
+            _checkRequiredOption "-i" "${OPTARG}"
+            _CMD_REMOVE_OLD_EXCLUDE_ERROR="$(convertBool "${OPTARG}")"
+            ;;
+        m)
+            _checkRequiredOption "-m" "${OPTARG}"
+            _CMD_REMOVE_OLD_KEEP_FULL="$(convertBool "${OPTARG}")"
             ;;
         v)
             test -z "${_CMD_VERBOSITY}" && _CMD_VERBOSITY="$_VERBOSITY_DEFAULT"
@@ -920,6 +936,9 @@ _applyGlobalOptions() {
     _applyGlobalOption "SPLIT" "${SPLIT}" "${_CMD_SPLIT}"
     _applyGlobalOption "MAX_JOBS" "${MAX_JOBS}" "${_CMD_MAX_JOBS}"
     _applyGlobalOption "OVERRIDE_EXISTING_BACKUPS" "${OVERRIDE_EXISTING_BACKUPS}" "${_CMD_OVERRIDE_EXISTING_BACKUPS}"
+    _applyGlobalOption "REMOVE_OLD_AFTER_DAYS" "${REMOVE_OLD_AFTER_DAYS}" "${_CMD_REMOVE_OLD_AFTER_DAYS}"
+    _applyGlobalOption "REMOVE_OLD_EXCLUDE_ERROR" "${REMOVE_OLD_EXCLUDE_ERROR}" "${_CMD_REMOVE_OLD_EXCLUDE_ERROR}"
+    _applyGlobalOption "REMOVE_OLD_KEEP_FULL" "${REMOVE_OLD_KEEP_FULL}" "${_CMD_REMOVE_OLD_KEEP_FULL}"
     pushIndents
     _checkLockFile
     _applySaveDir
@@ -1407,6 +1426,126 @@ _getTargetBase() {
     fi
 }
 
+_handleOldBackup() {
+    local folder msg rc regex
+
+    folder="$1"
+
+    if [ -z "${folder}" ]; then
+        error "Folder is an empty string"
+        _setRC
+        return 1
+    fi
+
+    if testBool "${REMOVE_OLD_EXCLUDE_ERROR}" 1; then
+        msg="Checking for error file"
+        mailLogStart "$msg"
+
+        if [ -e "${folder}/error" ]; then
+            msg="$msg ... YES (ignoring)"
+            mailLogEnd "YES (ignoring)"
+            return 0
+        fi
+        mailLogEnd "NO"
+    fi
+
+    if testBool "${REMOVE_OLD_KEEP_FULL}" 1; then
+        msg="Checking for full backup"
+        mailLogStart "$msg"
+
+        regex="_full_"
+        if [[ ${folder} =~ ${regex} ]]; then
+            msg="$msg ... YES (ignoring)"
+            mailLogEnd "YES (ignoring)"
+            return 0
+        fi
+    fi
+
+    if [ "${_DRY_RUN}" -eq 1 ]; then
+        msg="DRY RUN: Folder would be removed"
+        info "$msg"
+        mailLogLn "$msg"
+        return 0
+    fi
+
+    msg="Removing folder with content"
+    info "$msg"
+    mailLogStart "$msg"
+
+    rm -rf "$folder"
+    rc=$?
+    if [ "$rc" -gt 0 ]; then
+        _setRC
+        return 1
+    fi
+
+    mailLogEndOk
+
+    return 0
+}
+
+_removeOldBackups() {
+#    REMOVE_OLD_AFTER_DAYS=0
+#    REMOVE_OLD_EXCLUDE_ERROR=0
+    local rc oldBackups folder msg
+
+    pushIndents
+    mailLogLn "- Remove old backups after x days (REMOVE_OLD_AFTER_DAYS): ${REMOVE_OLD_AFTER_DAYS}"
+    mailLogLn "- Keep old backups with errors (REMOVE_OLD_EXCLUDE_ERROR): ${REMOVE_OLD_EXCLUDE_ERROR}"
+    mailLogLn "- Keep full backups (REMOVE_OLD_KEEP_FULL): ${REMOVE_OLD_KEEP_FULL}"
+    popIndents
+    mailLogLine
+    msg="Searching for old backups"
+    mailLogStart "$msg"
+    info "$msg"
+    if [ "${REMOVE_OLD_AFTER_DAYS}" -lt 1 ]; then
+        mailLogEnd "DISABLED"
+        info "DISABLED"
+        return
+    fi
+
+    oldBackups=()
+    while IFS= read -r -d $'\0' folder; do
+        oldBackups+=( "${folder}" )
+    done < <(find "${SAVE_DIR}" -mindepth 1 -maxdepth 1 -type d -mtime +"0" -print0)
+
+    msg="Found ${#oldBackups[@]} item/s"
+    mailLogEnd "$msg"
+    info "$msg"
+
+    test "${#oldBackups[@]}" -gt 0 || return 0
+
+    pushIndents
+    for folder in "${oldBackups[@]}"; do
+        mailLogLn "- ${folder}:"
+        info "- ${folder}:"
+        pushIndents
+            _handleOldBackup "${folder}"
+        popIndents
+    done
+
+    mailLogLine
+
+}
+
+removeOldBackups() {
+    local rc
+
+    mailLogLn "Removing old backups"
+    mailLogLine
+    pushIndents
+    _removeOldBackups
+    rc=$?
+    popIndents
+
+    test $rc -gt 0 || return 0
+
+    _setRC
+
+    return $rc
+
+}
+
 startJobs() {
     local job def len jobConfigFolder idx endTime maxJobs p
     _OPEN_JOBS=("${_BACKUP_NAMES[@]}")
@@ -1475,13 +1614,14 @@ startJobs() {
         startNextBgJob
     fi
 
+    removeOldBackups >> "${_LOG_FILE}"
+
     endTime="$(date "+%Y-%m-%d %H:%M:%S")"
     (
         mailLogLn "$(printf 'Completing backup at: %s' "'$endTime'")"
         mailLogLine
     ) | while read -r l; do
         echo "$l" >>"${_LOG_FILE}"
-#        notice "$l"
     done
 
     RC=0
