@@ -1508,7 +1508,7 @@ _removeOldBackups() {
     while IFS= read -r -d $'\0' folder; do
         oldBackups+=( "${folder}" )
     done < <(find "${SAVE_DIR}" -mindepth 1 -maxdepth 1 -type d -mtime +"${REMOVE_OLD_AFTER_DAYS}" -print0)
-l
+
     msg="Found ${#oldBackups[@]} item/s"
     mailLogEnd "$msg"
     info "$msg"
